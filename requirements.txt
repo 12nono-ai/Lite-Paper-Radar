@@ -1,0 +1,3 @@
+arxiv>=2.4.0,<3.0.0
+urllib3<2
+volcengine-python-sdk[ark]

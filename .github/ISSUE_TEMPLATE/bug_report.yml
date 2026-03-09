@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible problem in the pipeline, dashboard, or report generation.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report. Please include enough detail for someone else to reproduce the issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: A short description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, ordered reproduction.
+      placeholder: |
+        1. Start the dashboard with ...
+        2. Run a batch with ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Pipeline
+        - Dashboard
+        - Reports
+        - Storage
+        - Packaging / install
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Include OS, Python version, install method, and any relevant config shape. Do not paste secrets.
+      placeholder: |
+        - OS:
+        - Python:
+        - Install method:
+        - Command run:
+        - Relevant config:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant stack traces, screenshots, or report snippets. Remove secrets first.
+      render: shell

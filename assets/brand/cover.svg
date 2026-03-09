@@ -1,0 +1,78 @@
+<svg width="1600" height="840" viewBox="0 0 1600 840" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="40" x2="1480" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08162C"/>
+      <stop offset="0.5" stop-color="#0D2F4F"/>
+      <stop offset="1" stop-color="#155E63"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="238" y1="178" x2="1358" y2="694" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9BE7FF"/>
+      <stop offset="1" stop-color="#F4D35E"/>
+    </linearGradient>
+    <filter id="blurGlow" x="1048" y="148" width="352" height="352" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="32"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="840" rx="48" fill="url(#bg)"/>
+  <g opacity="0.18">
+    <path d="M0 112H1600" stroke="#E8F7FF"/>
+    <path d="M0 224H1600" stroke="#E8F7FF"/>
+    <path d="M0 336H1600" stroke="#E8F7FF"/>
+    <path d="M0 448H1600" stroke="#E8F7FF"/>
+    <path d="M0 560H1600" stroke="#E8F7FF"/>
+    <path d="M0 672H1600" stroke="#E8F7FF"/>
+    <path d="M160 0V840" stroke="#E8F7FF"/>
+    <path d="M320 0V840" stroke="#E8F7FF"/>
+    <path d="M480 0V840" stroke="#E8F7FF"/>
+    <path d="M640 0V840" stroke="#E8F7FF"/>
+    <path d="M800 0V840" stroke="#E8F7FF"/>
+    <path d="M960 0V840" stroke="#E8F7FF"/>
+    <path d="M1120 0V840" stroke="#E8F7FF"/>
+    <path d="M1280 0V840" stroke="#E8F7FF"/>
+    <path d="M1440 0V840" stroke="#E8F7FF"/>
+  </g>
+  <rect x="96" y="102" width="632" height="636" rx="32" fill="#09192E" fill-opacity="0.68" stroke="#9BE7FF" stroke-opacity="0.18"/>
+  <rect x="132" y="144" width="110" height="110" rx="28" fill="#0E2A47"/>
+  <circle cx="187" cy="199" r="38" stroke="url(#accent)" stroke-width="8"/>
+  <path d="M162 220L180 202L196 212L218 176" stroke="#E8F7FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="162" cy="220" r="7" fill="#F4D35E"/>
+  <circle cx="180" cy="202" r="7" fill="#9BE7FF"/>
+  <circle cx="196" cy="212" r="7" fill="#9BE7FF"/>
+  <circle cx="218" cy="176" r="7" fill="#F4D35E"/>
+  <text x="276" y="182" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="62" font-weight="700">LLM Paper Radar</text>
+  <text x="276" y="238" fill="#B9D7E6" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="28" font-weight="500">Daily arXiv monitoring with bilingual Ark summaries and hot-topic tracking</text>
+  <rect x="132" y="314" width="560" height="110" rx="24" fill="#0C233D" stroke="#E8F7FF" stroke-opacity="0.08"/>
+  <text x="168" y="360" fill="#F4D35E" font-family="Menlo, Monaco, monospace" font-size="26" font-weight="700">Top Topics</text>
+  <text x="168" y="400" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24">reasoning  •  evaluation &amp; llm as a judge  •  multimodal llm</text>
+  <rect x="132" y="456" width="560" height="220" rx="24" fill="#0C233D" stroke="#E8F7FF" stroke-opacity="0.08"/>
+  <text x="168" y="504" fill="#9BE7FF" font-family="Menlo, Monaco, monospace" font-size="26" font-weight="700">Pipeline</text>
+  <text x="168" y="548" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24">fetch  →  filter  →  summarize  →  trend  →  report</text>
+  <text x="168" y="598" fill="#B9D7E6" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="22">Browse papers, inspect trends, and keep manual review in one local dashboard.</text>
+  <g filter="url(#blurGlow)">
+    <circle cx="1224" cy="324" r="112" fill="#9BE7FF" fill-opacity="0.28"/>
+  </g>
+  <rect x="860" y="116" width="624" height="608" rx="32" fill="#081523" stroke="#E8F7FF" stroke-opacity="0.12"/>
+  <rect x="896" y="156" width="552" height="64" rx="18" fill="#10253E"/>
+  <rect x="920" y="178" width="160" height="20" rx="10" fill="#F4D35E"/>
+  <rect x="1098" y="178" width="142" height="20" rx="10" fill="#9BE7FF" fill-opacity="0.8"/>
+  <rect x="1258" y="178" width="138" height="20" rx="10" fill="#E8F7FF" fill-opacity="0.3"/>
+  <rect x="896" y="248" width="248" height="148" rx="24" fill="#0E2237"/>
+  <rect x="1170" y="248" width="278" height="148" rx="24" fill="#0E2237"/>
+  <rect x="896" y="422" width="552" height="126" rx="24" fill="#0E2237"/>
+  <rect x="896" y="576" width="552" height="108" rx="24" fill="#0E2237"/>
+  <text x="926" y="294" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Snapshot</text>
+  <text x="1200" y="294" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Hot Topics</text>
+  <text x="926" y="468" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Top Papers</text>
+  <text x="926" y="624" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Reports</text>
+  <rect x="926" y="316" width="74" height="54" rx="18" fill="#15314E"/>
+  <rect x="1016" y="316" width="74" height="54" rx="18" fill="#15314E"/>
+  <rect x="1106" y="316" width="74" height="54" rx="18" fill="#15314E"/>
+  <rect x="1200" y="316" width="216" height="16" rx="8" fill="#E8F7FF" fill-opacity="0.22"/>
+  <rect x="1200" y="344" width="188" height="16" rx="8" fill="#9BE7FF" fill-opacity="0.72"/>
+  <rect x="1200" y="372" width="154" height="16" rx="8" fill="#F4D35E" fill-opacity="0.82"/>
+  <rect x="926" y="494" width="488" height="14" rx="7" fill="#E8F7FF" fill-opacity="0.26"/>
+  <rect x="926" y="524" width="442" height="14" rx="7" fill="#9BE7FF" fill-opacity="0.58"/>
+  <rect x="926" y="554" width="376" height="14" rx="7" fill="#E8F7FF" fill-opacity="0.2"/>
+  <rect x="926" y="650" width="212" height="14" rx="7" fill="#F4D35E" fill-opacity="0.72"/>
+  <rect x="1152" y="650" width="182" height="14" rx="7" fill="#9BE7FF" fill-opacity="0.62"/>
+</svg>

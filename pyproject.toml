@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arxiv-llm-watch"
+version = "0.1.0"
+description = "LLM Paper Radar: daily arXiv monitoring and bilingual LLM paper reporting with Volcengine Ark."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+dependencies = [
+  "arxiv>=2.4.0,<3.0.0",
+  "urllib3<2",
+  "volcengine-python-sdk[ark]",
+]
+keywords = ["arxiv", "llm", "papers", "dashboard", "ark"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.scripts]
+arxiv-llm-watch = "arxiv_llm_watch.cli:main"
+llm-paper-radar = "arxiv_llm_watch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["arxiv_llm_watch*"]

@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a meaningful improvement to the pipeline, dashboard, or report workflow.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user problem first. Requests framed around concrete workflows are much easier to evaluate.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user workflow is blocked or inefficient today?
+      placeholder: I want to ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you want.
+      placeholder: The project should ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or other approaches you evaluated.
+      placeholder: I also considered ...
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Expected impact
+      options:
+        - Small quality-of-life improvement
+        - Medium workflow improvement
+        - Major workflow improvement
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Affected areas
+      options:
+        - label: arXiv fetch / filtering
+        - label: Ark analysis / summarization
+        - label: Topic detection / trend ranking
+        - label: Dashboard UX
+        - label: Report generation
+        - label: Packaging / docs

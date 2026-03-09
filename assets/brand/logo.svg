@@ -1,0 +1,27 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1F3A"/>
+      <stop offset="0.55" stop-color="#113B63"/>
+      <stop offset="1" stop-color="#1D6E73"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="96" y1="88" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9BE7FF"/>
+      <stop offset="1" stop-color="#F4D35E"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="128" stroke="url(#ring)" stroke-width="18" opacity="0.95"/>
+  <circle cx="256" cy="256" r="76" stroke="#9BE7FF" stroke-width="10" opacity="0.7"/>
+  <path d="M256 100V176" stroke="#F4D35E" stroke-width="12" stroke-linecap="round"/>
+  <path d="M256 336V412" stroke="#F4D35E" stroke-width="12" stroke-linecap="round"/>
+  <path d="M100 256H176" stroke="#F4D35E" stroke-width="12" stroke-linecap="round"/>
+  <path d="M336 256H412" stroke="#F4D35E" stroke-width="12" stroke-linecap="round"/>
+  <path d="M170 334L226 278L266 302L336 196" stroke="#E8F7FF" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="170" cy="334" r="16" fill="#F4D35E"/>
+  <circle cx="226" cy="278" r="16" fill="#9BE7FF"/>
+  <circle cx="266" cy="302" r="16" fill="#9BE7FF"/>
+  <circle cx="336" cy="196" r="16" fill="#F4D35E"/>
+  <rect x="120" y="92" width="104" height="44" rx="22" fill="#E8F7FF" fill-opacity="0.12"/>
+  <text x="172" y="121" text-anchor="middle" fill="#E8F7FF" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">LLM</text>
+</svg>
