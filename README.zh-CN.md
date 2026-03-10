@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`LLM Paper Radar` 是 `arxiv-llm-watch` 这个 Python 包的公开项目名。它是一个面向 LLM 研究者的轻量级论文雷达：每天抓取新的 arXiv 论文，调用 Ark 生成双语结构化摘要，跟踪短期热点主题，并通过本地 dashboard 进行浏览和人工整理。
+`LLM Paper Radar` 是 `arxiv-llm-watch` 这个 Python 包的公开项目名。它是一个面向 LLM 研究者的轻量级论文雷达：每天抓取新的 arXiv 论文，调用可配置的 LLM provider 生成双语结构化摘要，跟踪短期热点主题，并通过本地 dashboard 进行浏览和人工整理。
 
 仓库里的关键信息入口：
 
@@ -22,7 +22,7 @@
 
 - 从可配置的 arXiv 分类中抓取最新论文
 - 在调用模型前先做一层低成本关键词门禁
-- 使用 Ark 生成双语结构化分析
+- 使用可配置的 LLM API 生成双语结构化分析
 - 将论文映射到一套受控的 LLM topic taxonomy
 - 用滚动时间窗口计算热点主题
 - 将状态保存到 SQLite，并生成 Markdown 日报
@@ -99,15 +99,40 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
+## 快速开始
+
+从 clone 到跑起 dashboard 的最短路径：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip && pip install -e .
+python3 -m arxiv_llm_watch.cli init --provider ark
+python3 -m arxiv_llm_watch.cli doctor
+python3 -m arxiv_llm_watch.cli dashboard
+```
+
+如果你更习惯 `make`：
+
+```bash
+make setup
+make init-ark
+make doctor
+make dashboard
+```
+
 ## 配置
 
-复制 `.env.example` 为 `.env`，然后填入你的 Ark 配置。
+复制 `.env.example` 为 `.env`，然后填入你的 LLM provider 配置。
 
 ### 环境变量
 
-- `ARK_API_KEY`: Ark API Key
-- `ARK_BASE_URL`: Ark API Base URL
-- `ARK_MODEL`: Ark 模型名或 endpoint ID
+- `LLM_PROVIDER`: `ark` 或 `openai_compatible`
+- `LLM_API_KEY`: provider API Key
+- `LLM_BASE_URL`: provider API Base URL
+- `LLM_MODEL`: 模型名或 endpoint ID
+- `LLM_API_PATH`: OpenAI 兼容网关使用的 chat-completions 路径，默认 `/chat/completions`
+- `LLM_HEADERS_JSON`: OpenAI 兼容网关的额外请求头，JSON 对象格式
 - `ARXIV_CATEGORIES`: 逗号分隔的 arXiv 分类
 - `ARXIV_KEYWORDS`: 可选，抓取阶段使用的关键词，和分类条件一起参与 arXiv 查询
 - `ARXIV_MAX_RESULTS`: 日期过滤前，最多从 arXiv 拉取多少篇候选
@@ -122,7 +147,22 @@ pip install -r requirements.txt
 - `DB_PATH`: SQLite 数据库路径
 - `LLM_TEMPERATURE`: 结构化分析时的模型温度
 
+旧的 `ARK_API_KEY`、`ARK_BASE_URL`、`ARK_MODEL` 仍然可以作为兼容回退字段使用，所以现有 Ark 配置不用立刻迁移。
+
 ## 使用方法
+
+先生成一份可编辑的 `.env`：
+
+```bash
+python3 -m arxiv_llm_watch.cli init --provider ark
+python3 -m arxiv_llm_watch.cli init --provider openai_compatible
+```
+
+检查本地环境是否已经可运行：
+
+```bash
+python3 -m arxiv_llm_watch.cli doctor
+```
 
 运行一轮 pipeline：
 
@@ -179,7 +219,7 @@ llm-paper-radar dashboard
 
 1. 从指定 arXiv 分类抓取最近论文。
 2. 用轻量关键词门禁先过滤明显无关的论文。
-3. 将剩余论文送到 Ark，要求返回结构化 JSON 分析。
+3. 将剩余论文送到已配置的 LLM API，要求返回结构化 JSON 分析。
 4. 提取模型 topic，并归一化到受控的 LLM tracked topics。
 5. 基于近期窗口和基线窗口计算 topic momentum。
 6. 生成 Markdown 报告，并刷新 dashboard 所需状态。
@@ -205,6 +245,10 @@ llm-paper-radar dashboard
 
 - 目前只抓 arXiv 元数据，不解析 PDF 全文
 - 热点主题在历史数据积累较少时会偏稀疏
-- Ark 调用仍然是整条链路里最慢的一步
+- 目前支持两种 provider 模式：
+  - `ark`：直接调用 Ark SDK
+  - `openai_compatible`：向 `chat/completions` 风格接口发 HTTP 请求
+- 如果你使用 OpenAI 兼容网关，可以把 `LLM_BASE_URL` 指向 OpenAI、OpenRouter、OneAPI、vLLM 或其他兼容服务
+- 模型调用仍然是整条链路里最慢的一步
 - dashboard 目前是本地进程级状态，不是多用户系统
 - 关键词门禁是为了节省 API 成本，不是最终权威判断

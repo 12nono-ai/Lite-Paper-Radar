@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
+import sys
 from datetime import datetime, time, timedelta, timezone
+from pathlib import Path
 
-from .config import AppConfig
+from .config import AppConfig, normalize_llm_provider
 from .dashboard import DashboardServer
 from .pipeline import ArxivLLMWatchPipeline
 from .reporter import (
@@ -14,6 +17,9 @@ from .reporter import (
 )
 from .storage import Storage
 from .topics import compute_topic_trends
+
+
+SUPPORTED_PROVIDERS = ("ark", "openai_compatible")
 
 
 def _parse_optional_csv(raw: str | None) -> list[str] | None:
@@ -82,9 +88,186 @@ def _generate_period_report(
         storage.close()
 
 
+def _build_env_template(provider: str) -> str:
+    normalized = normalize_llm_provider(provider)
+    if normalized not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"Unsupported provider: {provider}")
+
+    defaults = {
+        "ark": {
+            "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+            "model": "doubao-seed-2-0-pro-260215",
+        },
+        "openai_compatible": {
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4.1-mini",
+        },
+    }[normalized]
+
+    return "\n".join(
+        [
+            f"LLM_PROVIDER={normalized}",
+            "LLM_API_KEY=",
+            f"LLM_BASE_URL={defaults['base_url']}",
+            f"LLM_MODEL={defaults['model']}",
+            "LLM_API_PATH=/chat/completions",
+            "LLM_HEADERS_JSON=",
+            "",
+            "# Legacy Ark keys remain supported as fallback:",
+            "# ARK_API_KEY=",
+            "# ARK_BASE_URL=",
+            "# ARK_MODEL=",
+            "",
+            "ARXIV_CATEGORIES=cs.CL,cs.AI,cs.LG,stat.ML",
+            "ARXIV_KEYWORDS=",
+            "ARXIV_MAX_RESULTS=250",
+            "LOOKBACK_DAYS=2",
+            "TOPIC_RECENT_DAYS=7",
+            "TOPIC_BASELINE_DAYS=7",
+            "TOPIC_LIMIT=8",
+            "REPORT_PAPER_LIMIT=12",
+            "ANALYSIS_LIMIT_PER_RUN=6",
+            "DATA_DIR=data",
+            "REPORTS_DIR=reports",
+            "DB_PATH=data/arxiv_llm_watch.db",
+            "LLM_TEMPERATURE=0.2",
+            "",
+        ]
+    )
+
+
+def _init_env_file(env_path: Path, provider: str, force: bool = False) -> dict:
+    normalized = normalize_llm_provider(provider)
+    if env_path.exists() and not force:
+        raise FileExistsError(f"{env_path} already exists. Use --force to overwrite it.")
+    env_path.write_text(_build_env_template(normalized), encoding="utf-8")
+    return {
+        "env_path": str(env_path),
+        "provider": normalized,
+        "next_steps": [
+            f"Fill in LLM_API_KEY in {env_path.name}",
+            "Run `python3 -m arxiv_llm_watch.cli doctor`",
+            "Run `python3 -m arxiv_llm_watch.cli dashboard`",
+        ],
+    }
+
+
+def _doctor_report(config: AppConfig, env_path: Path) -> dict:
+    checks = []
+
+    def add_check(name: str, ok: bool, detail: str, fix: str = "") -> None:
+        checks.append(
+            {
+                "name": name,
+                "ok": ok,
+                "detail": detail,
+                "fix": fix,
+            }
+        )
+
+    python_ok = sys.version_info >= (3, 9)
+    add_check(
+        "python",
+        python_ok,
+        f"Python {platform.python_version()}",
+        "Use Python 3.9+ and prefer the project .venv" if not python_ok else "",
+    )
+    add_check(
+        "env_file",
+        env_path.exists(),
+        f"{env_path} {'found' if env_path.exists() else 'missing'}",
+        "Run `python3 -m arxiv_llm_watch.cli init --provider ark` or `--provider openai_compatible`"
+        if not env_path.exists()
+        else "",
+    )
+    add_check(
+        "provider",
+        config.llm_provider in SUPPORTED_PROVIDERS,
+        f"Configured provider: {config.llm_provider}",
+        "Set LLM_PROVIDER to `ark` or `openai_compatible`" if config.llm_provider not in SUPPORTED_PROVIDERS else "",
+    )
+    add_check(
+        "api_key",
+        bool(config.llm_api_key),
+        "LLM API key configured" if config.llm_api_key else "LLM API key missing",
+        "Fill in LLM_API_KEY in .env" if not config.llm_api_key else "",
+    )
+    add_check(
+        "base_url",
+        bool(config.llm_base_url),
+        config.llm_base_url or "LLM base URL missing",
+        "Fill in LLM_BASE_URL in .env" if not config.llm_base_url else "",
+    )
+    add_check(
+        "model",
+        bool(config.llm_model),
+        config.llm_model or "LLM model missing",
+        "Fill in LLM_MODEL in .env" if not config.llm_model else "",
+    )
+    if config.llm_provider == "ark":
+        try:
+            import volcenginesdkarkruntime  # noqa: F401
+
+            add_check("provider_dependency", True, "Ark SDK installed")
+        except ImportError:
+            add_check(
+                "provider_dependency",
+                False,
+                "Ark SDK missing",
+                "Install dependencies with `pip install -e .` or `pip install -r requirements.txt`",
+            )
+    else:
+        add_check("provider_dependency", True, "OpenAI-compatible mode uses the Python standard library")
+
+    config.ensure_directories()
+    add_check("data_dir", config.data_dir.exists(), f"Data dir: {config.data_dir}")
+    add_check("reports_dir", config.reports_dir.exists(), f"Reports dir: {config.reports_dir}")
+
+    ok_count = sum(1 for check in checks if check["ok"])
+    return {
+        "ok": ok_count == len(checks),
+        "checks": checks,
+        "summary": {
+            "passed": ok_count,
+            "total": len(checks),
+            "provider": config.llm_provider,
+            "provider_label": config.llm_provider_label,
+            "model": config.llm_model,
+            "env_path": str(env_path),
+        },
+    }
+
+
+def _print_doctor_report(report: dict) -> None:
+    summary = report["summary"]
+    print(f"Setup check: {summary['passed']}/{summary['total']} passed")
+    print(f"Provider: {summary['provider_label']} ({summary['provider']})")
+    print(f"Model: {summary['model'] or '(missing)'}")
+    print(f"Env file: {summary['env_path']}")
+    print("")
+    for check in report["checks"]:
+        prefix = "[OK]" if check["ok"] else "[FAIL]"
+        print(f"{prefix} {check['name']}: {check['detail']}")
+        if check["fix"]:
+            print(f"  next: {check['fix']}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Daily arXiv LLM watch pipeline")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init_parser = subparsers.add_parser("init", help="Create a starter .env file")
+    init_parser.add_argument(
+        "--provider",
+        default="ark",
+        help="LLM provider template to use: ark or openai_compatible",
+    )
+    init_parser.add_argument("--env-path", default=".env", help="Where to write the env file")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite an existing env file")
+
+    doctor_parser = subparsers.add_parser("doctor", help="Check whether the local setup is ready")
+    doctor_parser.add_argument("--env-path", default=".env", help="Env file to inspect")
+    doctor_parser.add_argument("--json", action="store_true", help="Print the report as JSON")
 
     run_parser = subparsers.add_parser("run", help="Fetch, analyze, and generate a report")
     run_parser.add_argument("--lookback-days", type=int, default=None, help="Override LOOKBACK_DAYS")
@@ -112,7 +295,23 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    config = AppConfig.from_env()
+
+    if args.command == "init":
+        summary = _init_env_file(Path(args.env_path), provider=args.provider, force=args.force)
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+
+    config = AppConfig.from_env(Path(getattr(args, "env_path", ".env")))
+
+    if args.command == "doctor":
+        report = _doctor_report(config, Path(args.env_path))
+        if args.json:
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return
+        _print_doctor_report(report)
+        if not report["ok"]:
+            raise SystemExit(1)
+        return
 
     if args.command == "run":
         pipeline = ArxivLLMWatchPipeline(config)

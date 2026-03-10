@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from urllib import error, request
 from typing import Any, Dict, List
 
 from .config import AppConfig
@@ -16,19 +17,10 @@ except ImportError:  # pragma: no cover
 class LLMClient:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        if Ark is None:
-            raise RuntimeError(
-                "The `volcenginesdkarkruntime` package is not installed. "
-                "Run `.venv/bin/pip install -r requirements.txt` first."
-            )
-        self.client = Ark(
-            base_url=self.config.ark_base_url,
-            api_key=self.config.ark_api_key,
-        )
+        self.backend = self._build_backend()
 
     def classify_and_summarize(self, paper: Paper) -> PaperAnalysis:
-        completion = self.client.chat.completions.create(
-            model=self.config.ark_model,
+        content = self.backend.create_chat_completion(
             temperature=self.config.llm_temperature,
             messages=[
                 {
@@ -45,7 +37,6 @@ class LLMClient:
                 },
             ],
         )
-        content = self._extract_content(completion)
         parsed = self._parse_content_json(content)
         return self._to_analysis(parsed)
 
@@ -53,8 +44,7 @@ class LLMClient:
         if len(papers) < 2:
             return ReportComparison()
 
-        completion = self.client.chat.completions.create(
-            model=self.config.ark_model,
+        content = self.backend.create_chat_completion(
             temperature=0.1,
             messages=[
                 {
@@ -71,9 +61,15 @@ class LLMClient:
                 },
             ],
         )
-        content = self._extract_content(completion)
         parsed = self._parse_content_json(content)
         return self._to_report_comparison(parsed)
+
+    def _build_backend(self) -> "_BaseProviderClient":
+        if self.config.llm_provider == "ark":
+            return _ArkProviderClient(self.config)
+        if self.config.llm_provider == "openai_compatible":
+            return _OpenAICompatibleProviderClient(self.config)
+        raise RuntimeError(f"Unsupported LLM provider: {self.config.llm_provider}")
 
     def _build_prompt(self, paper: Paper) -> str:
         schema = {
@@ -143,15 +139,40 @@ class LLMClient:
 
     @staticmethod
     def _extract_content(completion: Any) -> str:
+        if isinstance(completion, dict):
+            choices = completion.get("choices") or []
+            if not choices:
+                raise RuntimeError(f"Invalid chat response, missing choices: {completion}")
+            message = choices[0].get("message", {})
+            content = message.get("content", "")
+            return LLMClient._coerce_content_to_text(content)
+
         choices = getattr(completion, "choices", None)
         if not choices:
-            raise RuntimeError(f"Invalid Ark response, missing choices: {completion}")
+            raise RuntimeError(f"Invalid chat response, missing choices: {completion}")
 
         message = choices[0].message
         content = getattr(message, "content", "")
+        return LLMClient._coerce_content_to_text(content)
+
+    @staticmethod
+    def _coerce_content_to_text(content: Any) -> str:
         if isinstance(content, str):
             return content.strip()
-        raise RuntimeError(f"Unsupported Ark content format: {content}")
+        if isinstance(content, list):
+            chunks: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    chunks.append(item)
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("content") or item.get("output_text") or ""
+                    if text:
+                        chunks.append(str(text))
+            merged = "\n".join(chunk.strip() for chunk in chunks if chunk and str(chunk).strip()).strip()
+            if merged:
+                return merged
+        raise RuntimeError(f"Unsupported chat content format: {content}")
 
     @staticmethod
     def _parse_content_json(content: str) -> Dict[str, Any]:
@@ -239,3 +260,73 @@ class LLMClient:
             differences=parse_points("differences"),
             takeaways=parse_points("takeaways"),
         )
+
+
+class _BaseProviderClient:
+    def __init__(self, config: AppConfig) -> None:
+        self.config = config
+
+    def create_chat_completion(self, messages: List[Dict[str, str]], temperature: float) -> str:
+        raise NotImplementedError
+
+
+class _ArkProviderClient(_BaseProviderClient):
+    def __init__(self, config: AppConfig) -> None:
+        super().__init__(config)
+        if Ark is None:
+            raise RuntimeError(
+                "The `volcenginesdkarkruntime` package is not installed. "
+                "Run `.venv/bin/pip install -r requirements.txt` first."
+            )
+        self.client = Ark(
+            base_url=self.config.llm_base_url,
+            api_key=self.config.llm_api_key,
+        )
+
+    def create_chat_completion(self, messages: List[Dict[str, str]], temperature: float) -> str:
+        completion = self.client.chat.completions.create(
+            model=self.config.llm_model,
+            temperature=temperature,
+            messages=messages,
+        )
+        return LLMClient._extract_content(completion)
+
+
+class _OpenAICompatibleProviderClient(_BaseProviderClient):
+    def create_chat_completion(self, messages: List[Dict[str, str]], temperature: float) -> str:
+        payload = {
+            "model": self.config.llm_model,
+            "temperature": temperature,
+            "messages": messages,
+        }
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {self.config.llm_api_key}",
+            "Content-Type": "application/json",
+            **self.config.llm_headers,
+        }
+        chat_request = request.Request(
+            self.config.llm_endpoint,
+            data=raw,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with request.urlopen(chat_request, timeout=180) as response:
+                body = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"OpenAI-compatible request failed with HTTP {exc.code}: {detail}"
+            ) from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"OpenAI-compatible request failed: {exc.reason}") from exc
+
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"OpenAI-compatible response is not valid JSON: {body}") from exc
+
+        if parsed.get("error"):
+            raise RuntimeError(f"OpenAI-compatible API error: {parsed['error']}")
+        return LLMClient._extract_content(parsed)

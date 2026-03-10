@@ -122,7 +122,8 @@ class DashboardController:
                 "max_results": self.config.arxiv_max_results,
                 "analysis_limit_per_run": self.config.analysis_limit_per_run,
                 "report_paper_limit": self.config.report_paper_limit,
-                "model": self.config.ark_model,
+                "provider": self.config.llm_provider_label,
+                "model": self.config.llm_model,
             },
             "available_categories": categories,
             "filter_facets": filter_facets,
@@ -1491,7 +1492,7 @@ INDEX_HTML = """<!doctype html>
           <div class="run-entry-head">
             <div class="run-entry-copy">
               <div class="topic-label" data-i18n="run.entry.label">Start Today&apos;s Refresh</div>
-              <p class="muted" data-i18n="run.entry.copy">Fetch the latest arXiv papers, analyze up to the configured cap with Ark, and update the dashboard in one step.</p>
+              <p class="muted" data-i18n="run.entry.copy">Fetch the latest arXiv papers, analyze up to the configured cap with the configured LLM API, and update the dashboard in one step.</p>
             </div>
             <div class="run-entry-actions">
               <button id="run-button" data-i18n="run.button">Run Batch</button>
@@ -1763,6 +1764,7 @@ INDEX_HTML = """<!doctype html>
         "hero.reports.eyebrow": "报告归档",
         "hero.reports.title": "日报归档",
         "hero.reports.subtitle": "集中查看历史 Markdown 日报，切换版本、预览内容，并快速回到论文工作台继续深挖。",
+        "hero.meta.provider": "接口：{value}",
         "hero.meta.model": "模型：{value}",
         "hero.meta.categories": "分类：{value}",
         "hero.meta.keywords": "抓取关键词：{value}",
@@ -1772,7 +1774,7 @@ INDEX_HTML = """<!doctype html>
         "run.panel.subtitle": "首页入口。先拉取新论文，再刷新今天的热点、代表论文和报告。",
         "run.archive_link": "打开运行归档",
         "run.entry.label": "启动今天的刷新",
-        "run.entry.copy": "一键抓取最新 arXiv 论文，按设定上限调用 Ark 分析，并更新首页、搜索页和报告页。",
+        "run.entry.copy": "一键抓取最新 arXiv 论文，按设定上限调用已配置的 LLM API 分析，并更新首页、搜索页和报告页。",
         "run.button": "运行批次",
         "run.idle": "空闲中。",
         "run.lookback": "回看天数",
@@ -1926,6 +1928,7 @@ INDEX_HTML = """<!doctype html>
         "hero.reports.eyebrow": "Report Archive",
         "hero.reports.title": "Daily Report Archive",
         "hero.reports.subtitle": "Browse generated Markdown reports, switch versions, and jump back into paper exploration.",
+        "hero.meta.provider": "Provider: {value}",
         "hero.meta.model": "Model: {value}",
         "hero.meta.categories": "Categories: {value}",
         "hero.meta.keywords": "Fetch keywords: {value}",
@@ -1935,7 +1938,7 @@ INDEX_HTML = """<!doctype html>
         "run.panel.subtitle": "Primary homepage entry. Fetch fresh papers first, then refresh today's topics, representative papers, and reports.",
         "run.archive_link": "Open Run Archive",
         "run.entry.label": "Start Today's Refresh",
-        "run.entry.copy": "Fetch the latest arXiv papers, analyze up to the configured cap with Ark, and update the dashboard in one step.",
+        "run.entry.copy": "Fetch the latest arXiv papers, analyze up to the configured cap with the configured LLM API, and update the dashboard in one step.",
         "run.button": "Run Batch",
         "run.idle": "Idle.",
         "run.lookback": "Lookback Days",
@@ -2332,6 +2335,7 @@ INDEX_HTML = """<!doctype html>
         ? `<span class="chip">${escapeHtml(t("hero.meta.keywords", { value: config.query_keywords.join(", ") }))}</span>`
         : "";
       meta.innerHTML = `
+        <span class="chip">${escapeHtml(t("hero.meta.provider", { value: config.provider }))}</span>
         <span class="chip">${escapeHtml(t("hero.meta.model", { value: config.model }))}</span>
         <span class="chip">${escapeHtml(t("hero.meta.categories", { value: config.categories.join(", ") }))}</span>
         ${keywordChip}

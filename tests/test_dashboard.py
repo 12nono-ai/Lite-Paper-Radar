@@ -19,9 +19,12 @@ class DashboardTests(unittest.TestCase):
             report_path.write_text("# report", encoding="utf-8")
 
             config = AppConfig(
-                ark_api_key="key",
-                ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-                ark_model="demo-model",
+                llm_provider="ark",
+                llm_api_key="key",
+                llm_base_url="https://ark.cn-beijing.volces.com/api/v3",
+                llm_model="demo-model",
+                llm_api_path="/chat/completions",
+                llm_headers={},
                 arxiv_categories=["cs.CL"],
                 arxiv_keywords=["reasoning", "alignment"],
                 arxiv_max_results=10,
@@ -77,6 +80,8 @@ class DashboardTests(unittest.TestCase):
 
             self.assertEqual(state["config"]["analysis_limit_per_run"], 6)
             self.assertEqual(state["config"]["query_keywords"], ["reasoning", "alignment"])
+            self.assertEqual(state["config"]["provider"], "Ark")
+            self.assertEqual(state["config"]["model"], "demo-model")
             self.assertIn("cs.CL", state["available_categories"])
             self.assertEqual(len(state["analyzed_papers"]), 1)
             self.assertEqual(state["analyzed_papers"][0]["title"], "Test LLM Paper")
@@ -123,9 +128,12 @@ class DashboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config = AppConfig(
-                ark_api_key="key",
-                ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-                ark_model="demo-model",
+                llm_provider="ark",
+                llm_api_key="key",
+                llm_base_url="https://ark.cn-beijing.volces.com/api/v3",
+                llm_model="demo-model",
+                llm_api_path="/chat/completions",
+                llm_headers={},
                 arxiv_categories=["cs.CL"],
                 arxiv_keywords=[],
                 arxiv_max_results=10,
@@ -157,9 +165,12 @@ class DashboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config = AppConfig(
-                ark_api_key="key",
-                ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-                ark_model="demo-model",
+                llm_provider="ark",
+                llm_api_key="key",
+                llm_base_url="https://ark.cn-beijing.volces.com/api/v3",
+                llm_model="demo-model",
+                llm_api_path="/chat/completions",
+                llm_headers={},
                 arxiv_categories=["cs.CL"],
                 arxiv_keywords=[],
                 arxiv_max_results=10,

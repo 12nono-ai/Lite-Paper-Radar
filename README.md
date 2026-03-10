@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`LLM Paper Radar` is the public-facing name for the `arxiv-llm-watch` package. It is a lightweight daily paper monitor for LLM researchers: fetch fresh arXiv papers, generate bilingual Ark summaries, track short-term topic momentum, and browse everything in a local dashboard.
+`LLM Paper Radar` is the public-facing name for the `arxiv-llm-watch` package. It is a lightweight daily paper monitor for LLM researchers: fetch fresh arXiv papers, generate bilingual structured summaries with a configurable LLM provider, track short-term topic momentum, and browse everything in a local dashboard.
 
 Useful repository metadata lives here:
 
@@ -22,7 +22,7 @@ Useful repository metadata lives here:
 
 - fetches recent papers from configurable arXiv categories
 - applies a low-cost keyword gate before hitting the model API
-- asks Ark for bilingual structured analysis
+- asks a configurable LLM API for bilingual structured analysis
 - maps papers into a controlled LLM topic taxonomy
 - computes hot topics over rolling time windows
 - stores state in SQLite and renders daily reports
@@ -93,15 +93,40 @@ pip install -e .
 
 If you prefer not to install in editable mode, `pip install -r requirements.txt` also works for local use.
 
+## Quickstart
+
+Fastest path from clone to dashboard:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip && pip install -e .
+python3 -m arxiv_llm_watch.cli init --provider ark
+python3 -m arxiv_llm_watch.cli doctor
+python3 -m arxiv_llm_watch.cli dashboard
+```
+
+If you prefer Make targets:
+
+```bash
+make setup
+make init-ark
+make doctor
+make dashboard
+```
+
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in your Ark settings.
+Copy `.env.example` to `.env` and fill in your LLM provider settings.
 
 ### Environment variables
 
-- `ARK_API_KEY`: Ark API key
-- `ARK_BASE_URL`: Ark base URL
-- `ARK_MODEL`: Ark model name or endpoint ID
+- `LLM_PROVIDER`: `ark` or `openai_compatible`
+- `LLM_API_KEY`: provider API key
+- `LLM_BASE_URL`: provider base URL
+- `LLM_MODEL`: model name or endpoint ID
+- `LLM_API_PATH`: chat-completions path for OpenAI-compatible gateways, defaults to `/chat/completions`
+- `LLM_HEADERS_JSON`: optional extra headers for OpenAI-compatible gateways, as a JSON object
 - `ARXIV_CATEGORIES`: comma-separated arXiv categories
 - `ARXIV_KEYWORDS`: optional comma-separated fetch keywords, combined with categories at query time
 - `ARXIV_MAX_RESULTS`: recent results to pull before date filtering
@@ -116,7 +141,22 @@ Copy `.env.example` to `.env` and fill in your Ark settings.
 - `DB_PATH`: SQLite database path
 - `LLM_TEMPERATURE`: model temperature for structured analysis
 
+Legacy `ARK_API_KEY`, `ARK_BASE_URL`, and `ARK_MODEL` are still accepted as fallback values, so existing Ark setups do not need to migrate immediately.
+
 ## Usage
+
+Create a starter `.env` file:
+
+```bash
+python3 -m arxiv_llm_watch.cli init --provider ark
+python3 -m arxiv_llm_watch.cli init --provider openai_compatible
+```
+
+Check whether the local setup is ready:
+
+```bash
+python3 -m arxiv_llm_watch.cli doctor
+```
 
 Run one pipeline batch:
 
@@ -173,7 +213,7 @@ These files are meant for local runtime state and should not be committed.
 
 1. Fetch recent papers from configured arXiv categories.
 2. Apply a lightweight keyword gate to skip obvious non-LLM papers.
-3. Send remaining papers to Ark for structured JSON analysis.
+3. Send remaining papers to the configured LLM API for structured JSON analysis.
 4. Extract model topics and normalize them into tracked LLM topics.
 5. Compute topic momentum across recent and baseline windows.
 6. Generate a Markdown report and refresh dashboard state.
@@ -200,4 +240,7 @@ Example cron entry for a daily run at 09:00:
 - The keyword gate is intentionally conservative on API cost, not authoritative on relevance.
 - Topic trends become more reliable after several days of accumulated history.
 - The current version does not parse full PDFs or citations.
-- Ark text generation is wired through `chat.completions.create(...)`, which matches the current text-generation API surface used by this project.
+- Two provider modes are supported today:
+  - `ark`: uses the Ark SDK directly
+  - `openai_compatible`: sends raw HTTP requests to a `chat/completions`-style endpoint
+- For OpenAI-compatible gateways, you can point `LLM_BASE_URL` at OpenAI, OpenRouter, OneAPI, vLLM, or another compatible service.

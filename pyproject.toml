@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "arxiv-llm-watch"
 version = "0.1.0"
-description = "LLM Paper Radar: daily arXiv monitoring and bilingual LLM paper reporting with Volcengine Ark."
+description = "LLM Paper Radar: daily arXiv monitoring and bilingual LLM paper reporting with configurable LLM providers."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
@@ -14,7 +14,7 @@ dependencies = [
   "urllib3<2",
   "volcengine-python-sdk[ark]",
 ]
-keywords = ["arxiv", "llm", "papers", "dashboard", "ark"]
+keywords = ["arxiv", "llm", "papers", "dashboard", "openai-compatible"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",

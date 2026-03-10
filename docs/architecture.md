@@ -1,6 +1,6 @@
 # Architecture
 
-`LLM Paper Radar` is a local-first research monitoring tool. It pulls recent arXiv papers, filters and analyzes LLM-relevant items with Ark, stores structured state in SQLite, and exposes the results through Markdown reports and a small dashboard.
+`LLM Paper Radar` is a local-first research monitoring tool. It pulls recent arXiv papers, filters and analyzes LLM-relevant items with a configurable LLM provider, stores structured state in SQLite, and exposes the results through Markdown reports and a small dashboard.
 
 ## Design goals
 
@@ -16,7 +16,7 @@ flowchart LR
     A["arXiv API"] --> B["fetcher.py"]
     B --> C["storage.py / papers table"]
     C --> D["topics.py keyword gate"]
-    D --> E["llm_client.py / Ark"]
+    D --> E["llm_client.py / provider adapter"]
     E --> F["storage.py / analysis fields"]
     F --> G["topics.py trend computation"]
     F --> H["reporter.py"]
@@ -45,12 +45,12 @@ flowchart LR
 - writes run history
 - saves fetched papers
 - applies keyword gating
-- sends pending papers to Ark for structured analysis
+- sends pending papers to the configured LLM API for structured analysis
 - computes topic momentum and writes a Markdown report
 
 ### `llm_client.py`
 
-- wraps the Ark SDK
+- wraps Ark or an OpenAI-compatible chat-completions endpoint
 - asks the model for bilingual structured paper analysis
 - returns normalized fields such as `summary`, `background`, `problem`, `method`, `findings`, and `limitations`
 
@@ -86,7 +86,7 @@ Stores:
 
 - arXiv metadata: title, abstract, categories, authors, dates, PDF URL
 - analysis status: `pending`, `filtered`, `rejected`, `analyzed`, `error`
-- Ark output fields
+- model output fields
 - manual review fields: starred, ignored, manual topics, analyst note
 
 ### `run_history`
@@ -126,5 +126,5 @@ Good next extensions:
 
 - arXiv fetch is metadata-only
 - topic momentum is based on short rolling windows, so early history is sparse
-- Ark calls are still the slowest step in the loop
+- model API calls are still the slowest step in the loop
 - dashboard state is local-process scoped, not multi-user

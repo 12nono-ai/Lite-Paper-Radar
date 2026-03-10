@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -35,11 +36,39 @@ def _read_csv(name: str, default: str) -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _read_headers_json(name: str) -> Dict[str, str]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{name} must be valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    return {str(key): str(value) for key, value in payload.items()}
+
+
+def normalize_llm_provider(value: str) -> str:
+    normalized = (value or "").strip().lower().replace("-", "_")
+    aliases = {
+        "ark_sdk": "ark",
+        "arkruntime": "ark",
+        "openai": "openai_compatible",
+        "openai_compat": "openai_compatible",
+        "compat": "openai_compatible",
+    }
+    return aliases.get(normalized, normalized or "ark")
+
+
 @dataclass
 class AppConfig:
-    ark_api_key: str
-    ark_base_url: str
-    ark_model: str
+    llm_provider: str
+    llm_api_key: str
+    llm_base_url: str
+    llm_model: str
+    llm_api_path: str
+    llm_headers: Dict[str, str]
     arxiv_categories: List[str]
     arxiv_keywords: List[str]
     arxiv_max_results: int
@@ -57,14 +86,23 @@ class AppConfig:
     @classmethod
     def from_env(cls, env_path: Optional[Path] = None) -> "AppConfig":
         load_env_file(env_path or Path(".env"))
+        llm_provider = normalize_llm_provider(os.getenv("LLM_PROVIDER", "ark"))
         data_dir = Path(os.getenv("DATA_DIR", "data"))
         reports_dir = Path(os.getenv("REPORTS_DIR", "reports"))
         db_path = Path(os.getenv("DB_PATH", str(data_dir / "arxiv_llm_watch.db")))
+        legacy_ark_base_url = os.getenv(
+            "ARK_BASE_URL",
+            "https://ark.cn-beijing.volces.com/api/v3" if llm_provider == "ark" else "",
+        )
+        legacy_ark_model = os.getenv("ARK_MODEL", "doubao-seed-2-0-pro-260215" if llm_provider == "ark" else "")
 
         return cls(
-            ark_api_key=os.getenv("ARK_API_KEY", ""),
-            ark_base_url=os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-            ark_model=os.getenv("ARK_MODEL", "doubao-seed-2-0-pro-260215"),
+            llm_provider=llm_provider,
+            llm_api_key=os.getenv("LLM_API_KEY", "") or os.getenv("ARK_API_KEY", ""),
+            llm_base_url=os.getenv("LLM_BASE_URL", "") or legacy_ark_base_url,
+            llm_model=os.getenv("LLM_MODEL", "") or legacy_ark_model,
+            llm_api_path=os.getenv("LLM_API_PATH", "/chat/completions"),
+            llm_headers=_read_headers_json("LLM_HEADERS_JSON"),
             arxiv_categories=_read_csv("ARXIV_CATEGORIES", "cs.CL,cs.AI,cs.LG,stat.ML"),
             arxiv_keywords=_read_csv("ARXIV_KEYWORDS", ""),
             arxiv_max_results=_read_int("ARXIV_MAX_RESULTS", 250),
@@ -87,12 +125,24 @@ class AppConfig:
 
     def validate(self) -> None:
         missing: Dict[str, str] = {}
-        if not self.ark_api_key:
-            missing["ARK_API_KEY"] = "missing API key"
-        if not self.ark_base_url:
-            missing["ARK_BASE_URL"] = "missing base URL"
-        if not self.ark_model:
-            missing["ARK_MODEL"] = "missing model or endpoint ID"
+        if self.llm_provider not in {"ark", "openai_compatible"}:
+            missing["LLM_PROVIDER"] = "must be one of: ark, openai_compatible"
+        if not self.llm_api_key:
+            missing["LLM_API_KEY"] = "missing API key (or legacy ARK_API_KEY)"
+        if not self.llm_base_url:
+            missing["LLM_BASE_URL"] = "missing base URL (or legacy ARK_BASE_URL)"
+        if not self.llm_model:
+            missing["LLM_MODEL"] = "missing model name (or legacy ARK_MODEL)"
         if missing:
             details = ", ".join(f"{key}: {reason}" for key, reason in missing.items())
             raise ValueError(f"Invalid configuration: {details}")
+
+    @property
+    def llm_provider_label(self) -> str:
+        return "Ark" if self.llm_provider == "ark" else "OpenAI Compatible"
+
+    @property
+    def llm_endpoint(self) -> str:
+        if not self.llm_api_path:
+            return self.llm_base_url
+        return f"{self.llm_base_url.rstrip('/')}/{self.llm_api_path.lstrip('/')}"
