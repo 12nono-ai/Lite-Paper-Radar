@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -12,6 +12,11 @@ from urllib.parse import parse_qs, urlparse
 
 from .config import AppConfig
 from .pipeline import ArxivLLMWatchPipeline
+from .reporter import (
+    build_fallback_report_comparison,
+    render_period_markdown_report,
+    write_period_report,
+)
 from .storage import Storage
 from .topics import compute_topic_trends, format_topic_momentum
 
@@ -36,6 +41,10 @@ def _coerce_csv_override(value: Any) -> List[str] | None:
 
 def _first_query_value(values: Dict[str, List[str]], key: str, default: str = "") -> str:
     return values.get(key, [default])[0]
+
+
+def _parse_utc_date(value: str) -> datetime:
+    return datetime.combine(datetime.strptime(value, "%Y-%m-%d").date(), time.min, tzinfo=timezone.utc)
 
 
 @dataclass
@@ -272,6 +281,74 @@ class DashboardController:
                 self._run_state.running = False
                 self._run_state.last_finished_at = _utc_now_iso()
 
+    def generate_period_report(
+        self,
+        *,
+        days: int | None = None,
+        start_date: str = "",
+        end_date: str = "",
+        paper_limit: int | None = None,
+    ) -> Dict[str, Any]:
+        if bool(start_date) != bool(end_date):
+            raise ValueError("start_date and end_date must be provided together")
+        if start_date and end_date:
+            start = _parse_utc_date(start_date)
+            end = _parse_utc_date(end_date) + timedelta(days=1)
+        else:
+            effective_days = max(1, int(days or 7))
+            end = datetime.now(timezone.utc)
+            start = end - timedelta(days=effective_days)
+        if end <= start:
+            raise ValueError("end_date must be later than start_date")
+
+        self.config.ensure_directories()
+        generated_at = datetime.now(timezone.utc)
+        storage = Storage(self.config.db_path)
+        storage.initialize()
+        try:
+            current_papers = storage.list_report_papers_between(
+                start=start,
+                end=end,
+                limit=paper_limit or self.config.report_paper_limit,
+            )
+            previous_start = start - (end - start)
+            previous_papers = storage.list_report_papers_between(start=previous_start, end=start, limit=None)
+            current_status_counts = storage.count_status_between(start=start, end=end)
+            topic_trends = compute_topic_trends(
+                current_papers + previous_papers,
+                recent_days=max(1, (end - start).days),
+                baseline_days=max(1, (end - start).days),
+                top_n=self.config.topic_limit,
+                now=end,
+            )
+            comparison = build_fallback_report_comparison(current_papers, topic_trends)
+            report_text = render_period_markdown_report(
+                generated_at=generated_at,
+                start=start,
+                end=end,
+                current_papers=current_papers,
+                previous_papers=previous_papers,
+                current_status_counts=current_status_counts,
+                comparison=comparison,
+            )
+            report_path = write_period_report(
+                report_text,
+                self.config.reports_dir,
+                start=start,
+                end=end,
+                generated_at=generated_at,
+            )
+            return {
+                "report_path": str(report_path),
+                "report_name": Path(report_path).name,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "paper_count": len(current_papers),
+                "previous_paper_count": len(previous_papers),
+            }
+        finally:
+            storage.close()
+
     def _list_reports(self, limit: int) -> List[Dict[str, Any]]:
         report_files = sorted(
             self.config.reports_dir.glob("*.md"),
@@ -380,6 +457,19 @@ class DashboardServer:
                         self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
                         return
                     self._send_json({"ok": True, "run_state": run_state}, status=HTTPStatus.ACCEPTED)
+                    return
+                if parsed.path == "/api/period-report":
+                    try:
+                        summary = controller.generate_period_report(
+                            days=_coerce_optional_int(payload.get("days")),
+                            start_date=str(payload.get("start_date") or "").strip(),
+                            end_date=str(payload.get("end_date") or "").strip(),
+                            paper_limit=_coerce_optional_int(payload.get("paper_limit")),
+                        )
+                    except ValueError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json({"ok": True, "summary": summary})
                     return
                 if parsed.path == "/api/paper/action":
                     entry_id = str(payload.get("entry_id") or "").strip()
@@ -1015,6 +1105,82 @@ INDEX_HTML = """<!doctype html>
       margin-bottom: 16px;
     }
     .toolbar .grow { flex: 1 1 240px; }
+    .period-builder {
+      margin-bottom: 16px;
+      padding: 18px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(13, 92, 99, 0.08), rgba(197, 139, 42, 0.10));
+      border: 1px solid rgba(20, 33, 61, 0.08);
+    }
+    .period-builder-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .period-builder-title {
+      margin: 0;
+      font-size: 20px;
+    }
+    .period-builder-copy {
+      margin: 8px 0 0;
+      max-width: 760px;
+    }
+    .period-quick-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .period-quick-actions button {
+      min-width: 180px;
+    }
+    .period-custom {
+      margin-top: 14px;
+      border-top: 1px solid rgba(20, 33, 61, 0.08);
+      padding-top: 14px;
+    }
+    .period-custom-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .period-custom-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .period-custom-note {
+      margin: 0;
+    }
+    .period-custom summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .period-custom summary::-webkit-details-marker {
+      display: none;
+    }
+    .period-custom summary::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 7px solid var(--muted);
+      transition: transform 160ms ease, border-left-color 160ms ease;
+      transform-origin: 35% 50%;
+    }
+    .period-custom[open] summary::before {
+      transform: rotate(90deg);
+      border-left-color: var(--ink);
+    }
     .result-toolbar {
       display: flex;
       justify-content: space-between;
@@ -1232,6 +1398,9 @@ INDEX_HTML = """<!doctype html>
       .search-grid {
         grid-template-columns: 1fr 1fr;
       }
+      .period-custom-grid {
+        grid-template-columns: 1fr;
+      }
       .dual {
         grid-template-columns: 1fr;
       }
@@ -1409,6 +1578,41 @@ INDEX_HTML = """<!doctype html>
         <a class="panel-action" href="/reports" data-i18n="reports.open_reports">Open Reports</a>
       </div>
       <div class="panel-body">
+        <div class="period-builder" id="period-builder">
+          <div class="period-builder-head">
+            <div>
+              <h3 class="period-builder-title" data-i18n="reports.period_builder_title">生成周期报告</h3>
+              <p class="period-builder-copy muted" data-i18n="reports.period_builder_copy">直接生成最近 7 天或 30 天的汇总对比报告；系统会自动和前一个等长时间段比较。只有自定义时间段才需要填写日期。</p>
+            </div>
+          </div>
+          <div class="period-quick-actions">
+            <button id="generate-period-7-button" data-i18n="reports.period_quick_7">生成最近 7 天</button>
+            <button class="secondary" id="generate-period-30-button" data-i18n="reports.period_quick_30">生成最近 30 天</button>
+          </div>
+          <details class="period-custom" id="period-custom">
+            <summary>
+              <span class="topic-label" data-i18n="reports.period_custom_title">自定义时间段</span>
+            </summary>
+            <div class="period-custom-grid">
+              <div>
+                <label for="period-start" data-i18n="reports.period_start">开始日期</label>
+                <input id="period-start" type="date">
+              </div>
+              <div>
+                <label for="period-end" data-i18n="reports.period_end">结束日期</label>
+                <input id="period-end" type="date">
+              </div>
+              <div>
+                <label for="period-paper-limit" data-i18n="reports.period_limit">代表论文数</label>
+                <input id="period-paper-limit" type="number" min="1" value="8">
+              </div>
+            </div>
+            <div class="period-custom-actions">
+              <button class="secondary" id="generate-custom-period-report-button" data-i18n="reports.period_custom_generate">生成自定义周期报告</button>
+              <p class="muted period-custom-note" data-i18n="reports.period_compare_hint">会自动与前一个等长时间段比较。</p>
+            </div>
+          </details>
+        </div>
         <div class="toolbar" id="reports-toolbar">
           <div class="grow">
             <label for="report-select" data-i18n="reports.selected_report">Selected Report</label>
@@ -1611,15 +1815,27 @@ INDEX_HTML = """<!doctype html>
         "reports.panel.subtitle": "Markdown 报告生成后会自动刷新。",
         "reports.open_reports": "打开报告页",
         "reports.selected_report": "当前报告",
+        "reports.period_builder_title": "生成周期报告",
+        "reports.period_builder_copy": "直接生成最近 7 天或 30 天的汇总对比报告；系统会自动和前一个等长时间段比较。只有自定义时间段才需要填写日期。",
+        "reports.period_start": "开始日期",
+        "reports.period_end": "结束日期",
+        "reports.period_limit": "代表论文数",
+        "reports.period_quick_7": "生成最近 7 天",
+        "reports.period_quick_30": "生成最近 30 天",
+        "reports.period_custom_title": "自定义时间段",
+        "reports.period_custom_generate": "生成自定义周期报告",
+        "reports.period_compare_hint": "会自动与前一个等长时间段比较。",
         "reports.refresh_preview": "刷新预览",
         "reports.loading_preview": "正在加载报告预览...",
         "reports.no_reports": "还没有生成报告。",
         "reports.no_report_selected": "当前没有选中的报告。",
         "reports.no_report_available": "当前没有可用报告。",
+        "reports.generate_success": "已生成周期报告：{name}",
+        "reports.generate_fail": "生成周期报告失败。",
         "reports.summary_title": "最新报告摘要",
         "reports.summary_subtitle": "仅显示最新 Markdown 报告的紧凑预览，完整内容请进入报告页。",
-        "reports.archive_title": "报告归档",
-        "reports.archive_subtitle": "浏览已生成的 Markdown 报告，切换版本并查看完整内容。",
+        "reports.archive_title": "报告中心",
+        "reports.archive_subtitle": "生成最近 7 天、30 天或自定义区间的对比报告，并浏览已归档的 Markdown 报告。",
         "reports.bytes": "{value} 字节",
         "reports.open_full_line": "- 打开 [/reports](/reports) 查看完整报告。",
         "papers.panel.title": "关键词搜索",
@@ -1762,15 +1978,27 @@ INDEX_HTML = """<!doctype html>
         "reports.panel.subtitle": "Auto-refreshes as new Markdown reports are generated.",
         "reports.open_reports": "Open Reports",
         "reports.selected_report": "Selected Report",
+        "reports.period_builder_title": "Generate Period Report",
+        "reports.period_builder_copy": "Generate a rolling 7-day or 30-day comparison in one click. The app always compares against the previous window of the same length. Dates are only needed for a custom range.",
+        "reports.period_start": "Start Date",
+        "reports.period_end": "End Date",
+        "reports.period_limit": "Representative Papers",
+        "reports.period_quick_7": "Generate Last 7 Days",
+        "reports.period_quick_30": "Generate Last 30 Days",
+        "reports.period_custom_title": "Custom Range",
+        "reports.period_custom_generate": "Generate Custom Report",
+        "reports.period_compare_hint": "This will automatically compare against the previous window of the same length.",
         "reports.refresh_preview": "Refresh Preview",
         "reports.loading_preview": "Loading preview...",
         "reports.no_reports": "No reports yet.",
         "reports.no_report_selected": "No report selected.",
         "reports.no_report_available": "No report available.",
+        "reports.generate_success": "Generated period report: {name}",
+        "reports.generate_fail": "Failed to generate period report.",
         "reports.summary_title": "Latest Report Summary",
         "reports.summary_subtitle": "A compact preview of the newest Markdown report. Open Reports for the full archive.",
-        "reports.archive_title": "Report Archive",
-        "reports.archive_subtitle": "Browse generated Markdown reports, switch versions, and inspect the full content.",
+        "reports.archive_title": "Report Center",
+        "reports.archive_subtitle": "Generate rolling or custom comparison reports and browse the Markdown archive.",
         "reports.bytes": "{value} bytes",
         "reports.open_full_line": "- Open [/reports](/reports) for the full report.",
         "papers.panel.title": "Keyword Search",
@@ -2468,6 +2696,85 @@ INDEX_HTML = """<!doctype html>
         : `<span>${escapeHtml(t("reports.no_report_selected"))}</span>`;
     }
 
+    function formatDateInputValue(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function ensureCustomPeriodDefaults() {
+      const start = document.getElementById("period-start");
+      const end = document.getElementById("period-end");
+      if (!start || !end) return;
+      if (!end.value) end.value = formatDateInputValue(new Date());
+      if (!start.value) {
+        const endDate = new Date(`${end.value}T00:00:00`);
+        const startDate = new Date(endDate.getTime() - (6 * 24 * 60 * 60 * 1000));
+        start.value = formatDateInputValue(startDate);
+      }
+    }
+
+    function getPeriodPaperLimit() {
+      return Number(document.getElementById("period-paper-limit")?.value || 8);
+    }
+
+    function setPeriodReportBusy(isBusy) {
+      ["generate-period-7-button", "generate-period-30-button", "generate-custom-period-report-button"].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = isBusy;
+      });
+    }
+
+    async function triggerPeriodReport(body) {
+      setPeriodReportBusy(true);
+      try {
+        const response = await fetch("/api/period-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          alert(payload.error || t("reports.generate_fail"));
+          return;
+        }
+        state.selectedReport = payload.summary.report_name || "";
+        await loadState(false);
+        await loadReportPreview(true);
+        alert(t("reports.generate_success", { name: payload.summary.report_name || "" }));
+      } finally {
+        setPeriodReportBusy(false);
+      }
+    }
+
+    async function triggerQuickPeriodReport(days) {
+      const body = {
+        days,
+        paper_limit: getPeriodPaperLimit(),
+      };
+      await triggerPeriodReport(body);
+    }
+
+    async function triggerCustomPeriodReport() {
+      ensureCustomPeriodDefaults();
+      const startDate = document.getElementById("period-start")?.value || "";
+      const endDate = document.getElementById("period-end")?.value || "";
+      if (!startDate || !endDate) {
+        alert(t("reports.generate_fail"));
+        return;
+      }
+      if (startDate > endDate) {
+        alert(t("reports.generate_fail"));
+        return;
+      }
+      await triggerPeriodReport({
+        start_date: startDate,
+        end_date: endDate,
+        paper_limit: getPeriodPaperLimit(),
+      });
+    }
+
     function renderMarkdown(content) {
       const lines = content.split(/\\r?\\n/);
       const blocks = [];
@@ -2832,8 +3139,11 @@ INDEX_HTML = """<!doctype html>
           document.getElementById("query-keywords").value = (payload.config.query_keywords || []).join(", ");
           document.getElementById("analysis-limit").value = payload.config.analysis_limit_per_run;
           document.getElementById("report-paper-limit").value = payload.config.report_paper_limit;
+          const periodPaperLimit = document.getElementById("period-paper-limit");
+          if (periodPaperLimit) periodPaperLimit.value = payload.config.report_paper_limit;
           document.getElementById("paper-limit").value = state.initialSearch.limit || payload.config.report_paper_limit;
           setSearchFilters(state.initialSearch);
+          ensureCustomPeriodDefaults();
           state.initialized = true;
         }
         await renderDashboardFromPayload(payload, forcePaperReload);
@@ -2875,6 +3185,18 @@ INDEX_HTML = """<!doctype html>
         state.reportCacheKey = "";
         loadReportPreview(true);
       });
+    }
+    if (document.getElementById("period-start") || document.getElementById("period-end")) {
+      ensureCustomPeriodDefaults();
+    }
+    if (document.getElementById("generate-period-7-button")) {
+      document.getElementById("generate-period-7-button").addEventListener("click", () => triggerQuickPeriodReport(7));
+    }
+    if (document.getElementById("generate-period-30-button")) {
+      document.getElementById("generate-period-30-button").addEventListener("click", () => triggerQuickPeriodReport(30));
+    }
+    if (document.getElementById("generate-custom-period-report-button")) {
+      document.getElementById("generate-custom-period-report-button").addEventListener("click", triggerCustomPeriodReport);
     }
     if (document.getElementById("paper-query")) {
       document.getElementById("paper-query").addEventListener("keydown", (event) => {

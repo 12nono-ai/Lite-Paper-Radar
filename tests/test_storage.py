@@ -247,6 +247,72 @@ class StorageTests(unittest.TestCase):
             finally:
                 storage.close()
 
+    def test_list_report_papers_between_and_count_status_between(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "test.db"
+            storage = Storage(db_path)
+            storage.initialize()
+            try:
+                papers = [
+                    Paper(
+                        entry_id="id-current",
+                        title="Current reasoning paper",
+                        summary="Studies reasoning.",
+                        published=datetime(2026, 3, 8),
+                        updated=datetime(2026, 3, 8),
+                        primary_category="cs.CL",
+                        categories=["cs.CL"],
+                        authors=["author"],
+                    ),
+                    Paper(
+                        entry_id="id-previous",
+                        title="Previous alignment paper",
+                        summary="Studies alignment.",
+                        published=datetime(2026, 3, 2),
+                        updated=datetime(2026, 3, 2),
+                        primary_category="cs.AI",
+                        categories=["cs.AI"],
+                        authors=["author"],
+                    ),
+                ]
+                storage.save_papers(papers, "2026-03-10T00:00:00+00:00")
+                storage.save_analysis(
+                    "id-current",
+                    PaperAnalysis(
+                        is_llm_related=True,
+                        relevance_reason="Relevant",
+                        llm_score=0.9,
+                        topics=["reasoning"],
+                        summary=SectionText(zh="中文", en="English"),
+                    ),
+                )
+                storage.save_analysis(
+                    "id-previous",
+                    PaperAnalysis(
+                        is_llm_related=True,
+                        relevance_reason="Relevant",
+                        llm_score=0.85,
+                        topics=["alignment"],
+                        summary=SectionText(zh="中文", en="English"),
+                    ),
+                )
+
+                current = storage.list_report_papers_between(
+                    start=datetime(2026, 3, 3),
+                    end=datetime(2026, 3, 10),
+                    limit=10,
+                )
+                counts = storage.count_status_between(
+                    start=datetime(2026, 3, 3),
+                    end=datetime(2026, 3, 10),
+                )
+                self.assertEqual(len(current), 1)
+                self.assertEqual(current[0]["entry_id"], "id-current")
+                self.assertEqual(counts["analyzed"], 1)
+                self.assertEqual(counts["total"], 1)
+            finally:
+                storage.close()
+
     def test_get_paper_and_category_mix_include_detail_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "test.db"

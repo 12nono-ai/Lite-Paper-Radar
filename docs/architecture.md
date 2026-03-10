@@ -70,6 +70,7 @@ flowchart LR
 
 - renders timestamped Markdown reports
 - summarizes hot topics, representative papers, visual snapshots, and cross-paper comparisons
+- generates period comparison reports for weekly or custom windows
 
 ### `dashboard.py`
 

@@ -244,6 +244,14 @@ class Storage:
     def list_report_papers(self, days: int, limit: int) -> List[dict]:
         return self.list_report_papers_window(days=days, offset_days=0, limit=limit)
 
+    def list_report_papers_between(
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int | None = None,
+    ) -> List[dict]:
+        return self._list_analyzed_papers_between(start=start, end=end, limit=limit)
+
     def list_report_papers_window(
         self,
         days: int,
@@ -253,8 +261,35 @@ class Storage:
         now = datetime.now(timezone.utc)
         window_end = now - timedelta(days=max(0, offset_days))
         window_start = window_end - timedelta(days=max(1, days))
+        return self._list_analyzed_papers_between(start=window_start, end=window_end, limit=limit)
+
+    def count_status_between(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> dict:
+        cursor = self.connection.execute(
+            """
+            SELECT analysis_status, COUNT(*) AS count
+            FROM papers
+            WHERE published >= ?
+              AND published < ?
+            GROUP BY analysis_status
+            """,
+            (start.isoformat(), end.isoformat()),
+        )
+        counts = {row["analysis_status"]: int(row["count"]) for row in cursor.fetchall()}
+        counts["total"] = sum(counts.values())
+        return counts
+
+    def _list_analyzed_papers_between(
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int | None = None,
+    ) -> List[dict]:
         limit_clause = "LIMIT ?" if limit is not None and limit > 0 else ""
-        params: list[object] = [window_start.isoformat(), window_end.isoformat()]
+        params: list[object] = [start.isoformat(), end.isoformat()]
         if limit_clause:
             params.append(limit)
         cursor = self.connection.execute(

@@ -39,6 +39,7 @@
 - 输出 `summary`、`background`、`problem`、`method`、`findings`、`limitations` 的中英双语字段
 - 支持 reasoning、agents、RAG、安全、效率、多模态、可解释性等方向的受控主题提取
 - 生成包含热点、代表论文和跨论文对比的 Markdown 日报
+- 支持最近 7 天、30 天或自定义时间窗口的周期汇总 / 对比报告
 - 记录运行历史，便于基本观测
 
 ### Dashboard
@@ -135,6 +136,19 @@ python3 -m arxiv_llm_watch.cli run
 python3 -m arxiv_llm_watch.cli run --lookback-days 4 --max-results 200 --query-keywords "reasoning,agent" --analysis-limit 6
 ```
 
+生成周报或任意时间段的对比报告：
+
+```bash
+python3 -m arxiv_llm_watch.cli period-report --days 7
+python3 -m arxiv_llm_watch.cli period-report --start-date 2026-03-01 --end-date 2026-03-07
+```
+
+Dashboard 的 `Reports` 页面也是同一套逻辑：
+
+- `生成最近 7 天` 和 `生成最近 30 天` 是一键滚动汇总。
+- `自定义时间段` 只在你明确要指定日期区间时使用。
+- 每次周期报告都会自动与前一个等长时间段比较。
+
 启动本地 dashboard：
 
 ```bash
@@ -169,6 +183,7 @@ llm-paper-radar dashboard
 4. 提取模型 topic，并归一化到受控的 LLM tracked topics。
 5. 基于近期窗口和基线窗口计算 topic momentum。
 6. 生成 Markdown 报告，并刷新 dashboard 所需状态。
+7. 按需生成一个周期汇总报告，用来对比当前窗口和前一个等长窗口。
 
 ## 调度
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -125,6 +125,190 @@ def build_window_delta(current_window_papers: List[dict], previous_window_papers
         "rising_topics": rising_topics,
         "cooling_topics": cooling_topics,
     }
+
+
+def build_topic_comparison(current_papers: List[dict], previous_papers: List[dict], top_n: int = 8) -> List[dict]:
+    current_topics: Counter[str] = Counter()
+    previous_topics: Counter[str] = Counter()
+    for paper in current_papers:
+        current_topics.update(set(display_topics_for_paper(paper)))
+    for paper in previous_papers:
+        previous_topics.update(set(display_topics_for_paper(paper)))
+
+    comparisons = []
+    for name in set(current_topics) | set(previous_topics):
+        current_count = current_topics.get(name, 0)
+        previous_count = previous_topics.get(name, 0)
+        if current_count <= 0 and previous_count <= 0:
+            continue
+        comparisons.append(
+            {
+                "name": name,
+                "current_count": current_count,
+                "previous_count": previous_count,
+                "diff": current_count - previous_count,
+                "momentum": format_topic_momentum(current_count, previous_count),
+            }
+        )
+
+    comparisons.sort(
+        key=lambda item: (item["current_count"], item["diff"], -item["previous_count"], item["name"]),
+        reverse=True,
+    )
+    return comparisons[:top_n]
+
+
+def build_period_highlights(current_papers: List[dict], previous_papers: List[dict], topic_limit: int = 5) -> dict:
+    current_topics: Counter[str] = Counter()
+    previous_topics: Counter[str] = Counter()
+    category_counter: Counter[str] = Counter()
+    for paper in current_papers:
+        current_topics.update(set(display_topics_for_paper(paper)))
+        if paper.get("primary_category"):
+            category_counter.update([paper["primary_category"]])
+    for paper in previous_papers:
+        previous_topics.update(set(display_topics_for_paper(paper)))
+
+    new_topics = []
+    cooling_topics = []
+    for name in set(current_topics) | set(previous_topics):
+        current_count = current_topics.get(name, 0)
+        previous_count = previous_topics.get(name, 0)
+        if current_count > 0 and previous_count == 0:
+            new_topics.append(name)
+        if previous_count > current_count:
+            cooling_topics.append(name)
+
+    return {
+        "top_categories": category_counter.most_common(3),
+        "top_topics": current_topics.most_common(topic_limit),
+        "new_topics": sorted(new_topics)[:topic_limit],
+        "cooling_topics": sorted(cooling_topics)[:topic_limit],
+        "unique_topics": len(current_topics),
+    }
+
+
+def render_period_markdown_report(
+    generated_at: datetime,
+    start: datetime,
+    end: datetime,
+    current_papers: List[dict],
+    previous_papers: List[dict],
+    current_status_counts: Dict[str, int],
+    comparison: ReportComparison | None = None,
+) -> str:
+    topic_comparison = build_topic_comparison(current_papers, previous_papers)
+    period_delta = build_window_delta(current_papers, previous_papers)
+    highlights = build_period_highlights(current_papers, previous_papers)
+    period_days = max(1, (end - start).days)
+    previous_start = start - timedelta(days=period_days)
+    previous_end = start
+
+    category_summary = ", ".join(f"{name} ({count})" for name, count in highlights["top_categories"]) or "n/a"
+    topic_summary = ", ".join(name for name, _ in highlights["top_topics"]) or "n/a"
+    report_comparison = comparison or build_fallback_report_comparison(current_papers, [
+        TopicTrend(
+            name=item["name"],
+            current_count=item["current_count"],
+            baseline_count=item["previous_count"],
+            growth=(item["diff"] / max(item["previous_count"], 1)) if item["current_count"] > 0 else 0.0,
+        )
+        for item in topic_comparison
+    ])
+
+    lines = [
+        f"# Period Report - {start.strftime('%Y-%m-%d')} to {(end - timedelta(days=1)).strftime('%Y-%m-%d')}",
+        "",
+        "## Window",
+        "",
+        f"- generated at: {generated_at.strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"- current window: {start.strftime('%Y-%m-%d')} -> {(end - timedelta(days=1)).strftime('%Y-%m-%d')}",
+        f"- previous window: {previous_start.strftime('%Y-%m-%d')} -> {(previous_end - timedelta(days=1)).strftime('%Y-%m-%d')}",
+        "",
+        "## Snapshot",
+        "",
+        f"- total papers in window: {current_status_counts.get('total', 0)}",
+        f"- analyzed papers: {current_status_counts.get('analyzed', 0)}",
+        f"- tracked topics covered: {highlights['unique_topics']}",
+        f"- dominant categories: {category_summary}",
+        f"- recurring topics: {topic_summary}",
+        "",
+        "## Period Comparison",
+        "",
+        f"- current window papers: {period_delta.get('current_count', 0)}",
+        f"- previous window papers: {period_delta.get('previous_count', 0)}",
+        f"- new papers in current window: {len(period_delta.get('new_papers', []))}",
+        f"- dropped papers vs previous window: {len(period_delta.get('dropped_papers', []))}",
+        "",
+    ]
+
+    if period_delta.get("rising_topics"):
+        lines.extend(["**Rising Topics**", ""])
+        for item in period_delta["rising_topics"]:
+            lines.append(f"- {item['name']}: {format_topic_momentum(item['current_count'], item['previous_count'])}")
+        lines.append("")
+    if highlights["new_topics"]:
+        lines.extend(["**New Topics In This Window**", ""])
+        for name in highlights["new_topics"]:
+            current_count = next((item["current_count"] for item in topic_comparison if item["name"] == name), 0)
+            lines.append(f"- {name}: New (0 -> {current_count})")
+        lines.append("")
+    if period_delta.get("cooling_topics"):
+        lines.extend(["**Cooling Topics**", ""])
+        for item in period_delta["cooling_topics"]:
+            lines.append(f"- {item['name']}: {format_topic_momentum(item['current_count'], item['previous_count'])}")
+        lines.append("")
+
+    lines.extend(["## Topic Comparison Matrix", ""])
+    if topic_comparison:
+        lines.extend(
+            [
+                "| topic | current | previous | momentum |",
+                "| --- | ---: | ---: | ---: |",
+            ]
+        )
+        for item in topic_comparison:
+            lines.append(
+                f"| {item['name']} | {item['current_count']} | {item['previous_count']} | {item['momentum']} |"
+            )
+    else:
+        lines.append("No topic comparison data yet.")
+
+    lines.extend(["", "## Representative Papers", ""])
+    if current_papers:
+        for paper in current_papers:
+            lines.extend(
+                [
+                    f"### [{paper['title']}]({paper['entry_id']})",
+                    "",
+                    f"- published: {paper['published']}",
+                    f"- primary category: {paper['primary_category']}",
+                    f"- tracked topics: {', '.join(display_topics_for_paper(paper)[:4]) or 'n/a'}",
+                    "",
+                    "**中文摘要**",
+                    "",
+                    paper.get("summary_zh") or paper.get("summary") or "n/a",
+                    "",
+                    "**English Summary**",
+                    "",
+                    paper.get("summary_en") or paper.get("summary") or "n/a",
+                    "",
+                ]
+            )
+    else:
+        lines.append("No analyzed papers available in the current window.")
+
+    lines.extend(["## Cross-Window Summary", ""])
+    lines.extend(
+        [
+            f"- zh: {report_comparison.overview.zh or 'n/a'}",
+            f"- en: {report_comparison.overview.en or 'n/a'}",
+            f"- zh(method): {report_comparison.method_landscape.zh or 'n/a'}",
+            f"- en(method): {report_comparison.method_landscape.en or 'n/a'}",
+        ]
+    )
+
+    return "\n".join(lines)
 
 
 def render_markdown_report(
@@ -331,5 +515,20 @@ def render_markdown_report(
 def write_report(content: str, reports_dir: Path, generated_at: datetime) -> Path:
     reports_dir.mkdir(parents=True, exist_ok=True)
     report_path = reports_dir / f"daily_{generated_at.strftime('%Y%m%d_%H%M%S')}.md"
+    report_path.write_text(content, encoding="utf-8")
+    return report_path
+
+
+def write_period_report(
+    content: str,
+    reports_dir: Path,
+    start: datetime,
+    end: datetime,
+    generated_at: datetime,
+) -> Path:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / (
+        f"period_{start.strftime('%Y%m%d')}_{(end - timedelta(days=1)).strftime('%Y%m%d')}_{generated_at.strftime('%H%M%S')}.md"
+    )
     report_path.write_text(content, encoding="utf-8")
     return report_path

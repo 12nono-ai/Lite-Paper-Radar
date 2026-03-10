@@ -114,6 +114,10 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Loading paper detail", PAPER_HTML)
         self.assertIn("run.history.in_progress", overview)
         self.assertIn('id="run-history-fold"', overview)
+        self.assertIn('id="generate-period-7-button"', reports)
+        self.assertIn('id="generate-period-30-button"', reports)
+        self.assertIn('id="generate-custom-period-report-button"', reports)
+        self.assertNotIn('id="period-mode"', reports)
 
     def test_controller_recovers_orphaned_running_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -148,6 +152,64 @@ class DashboardTests(unittest.TestCase):
             state = controller.build_state()
             self.assertEqual(state["run_history"][0]["status"], "failed")
             self.assertIn("未完成", state["run_history"][0]["error_message"])
+
+    def test_controller_generates_period_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = AppConfig(
+                ark_api_key="key",
+                ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+                ark_model="demo-model",
+                arxiv_categories=["cs.CL"],
+                arxiv_keywords=[],
+                arxiv_max_results=10,
+                lookback_days=7,
+                topic_recent_days=7,
+                topic_baseline_days=7,
+                topic_limit=5,
+                report_paper_limit=5,
+                analysis_limit_per_run=6,
+                data_dir=root / "data",
+                reports_dir=root / "reports",
+                db_path=root / "data" / "test.db",
+                llm_temperature=0.2,
+            )
+            config.ensure_directories()
+            storage = Storage(config.db_path)
+            storage.initialize()
+            try:
+                paper = Paper(
+                    entry_id="id-period",
+                    title="Reasoning period paper",
+                    summary="Reasoning",
+                    published=datetime(2026, 3, 8),
+                    updated=datetime(2026, 3, 8),
+                    primary_category="cs.CL",
+                    categories=["cs.CL"],
+                    authors=["author"],
+                )
+                storage.save_papers([paper], "2026-03-10T00:00:00+00:00")
+                storage.save_analysis(
+                    paper.entry_id,
+                    PaperAnalysis(
+                        is_llm_related=True,
+                        relevance_reason="Relevant",
+                        llm_score=0.91,
+                        topics=["reasoning"],
+                        summary=SectionText(zh="中文", en="English"),
+                    ),
+                )
+            finally:
+                storage.close()
+
+            controller = DashboardController(config)
+            summary = controller.generate_period_report(
+                start_date="2026-03-03",
+                end_date="2026-03-09",
+                paper_limit=5,
+            )
+            self.assertTrue(summary["report_name"].startswith("period_20260303_20260309_"))
+            self.assertEqual(summary["paper_count"], 1)
 
 
 if __name__ == "__main__":

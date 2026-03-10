@@ -39,6 +39,7 @@ The current implementation works on arXiv metadata only: `title`, `abstract`, `c
 - bilingual summary fields for `summary`, `background`, `problem`, `method`, `findings`, and `limitations`
 - tracked-topic extraction for areas such as reasoning, agents, RAG, safety, efficiency, multimodality, and interpretability
 - daily Markdown reports with hot topics, representative papers, and a cross-paper comparison section
+- period summary reports for the last 7/30 days or a custom time window
 - run history tracking for basic observability
 
 ### Dashboard
@@ -129,6 +130,19 @@ Override runtime settings when needed:
 python3 -m arxiv_llm_watch.cli run --lookback-days 4 --max-results 200 --query-keywords "reasoning,agent" --analysis-limit 6
 ```
 
+Generate a weekly or arbitrary-window comparison report:
+
+```bash
+python3 -m arxiv_llm_watch.cli period-report --days 7
+python3 -m arxiv_llm_watch.cli period-report --start-date 2026-03-01 --end-date 2026-03-07
+```
+
+In the dashboard `Reports` view, the period-report builder follows the same model:
+
+- `Generate Last 7 Days` and `Generate Last 30 Days` are one-click rolling summaries.
+- `Custom Range` is only for explicit date windows.
+- Every period report automatically compares against the previous window of the same length.
+
 Start the local dashboard:
 
 ```bash
@@ -163,6 +177,7 @@ These files are meant for local runtime state and should not be committed.
 4. Extract model topics and normalize them into tracked LLM topics.
 5. Compute topic momentum across recent and baseline windows.
 6. Generate a Markdown report and refresh dashboard state.
+7. Optionally generate a period report that compares the current window against the previous window of the same length.
 
 ## Scheduling
 
