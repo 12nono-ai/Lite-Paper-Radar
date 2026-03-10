@@ -359,7 +359,7 @@ class DashboardServer:
                     self._send_json(payload)
                     return
                 if parsed.path.startswith("/reports/"):
-                    self._serve_report(parsed.path.removeprefix("/reports/"))
+                    self._serve_report(parsed.path[len("/reports/"):])
                     return
                 self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -1363,20 +1363,6 @@ INDEX_HTML = """<!doctype html>
     </section>
 
     <div class="grid">
-      <section class="panel" id="stats-section">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title" data-i18n="stats.panel.title">Snapshot</h2>
-            <div class="panel-subtitle" data-i18n="stats.panel.subtitle">Current database view</div>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="stats" id="stats"></div>
-        </div>
-      </section>
-    </div>
-
-    <div class="grid">
       <section class="panel" id="topics-section">
         <div class="panel-head">
           <div>
@@ -1517,6 +1503,20 @@ INDEX_HTML = """<!doctype html>
         <div class="pagination" id="paper-pagination"></div>
       </div>
     </section>
+
+    <div class="grid">
+      <section class="panel" id="stats-section">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title" data-i18n="stats.panel.title">Snapshot</h2>
+            <div class="panel-subtitle" data-i18n="stats.panel.subtitle">Current database view</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="stats" id="stats"></div>
+        </div>
+      </section>
+    </div>
   </div>
   <nav class="mobile-nav">
     <a href="/" data-nav="overview" data-i18n="nav.overview.label">Overview</a>
